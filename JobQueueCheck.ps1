@@ -1,15 +1,15 @@
 ﻿#Start-Transcript -Path "c:\temp\log.txt" -Append -NoClobber -Force
 ################################
 
-# SQL-Verbindungsdetails
-$SqlServer = "1"  # z. B. "localhost"
+# SQL connection details
+$SqlServer = "1"  # e.g. "localhost"
 $SqlUser = "jobqueuecheck"
 $SqlPassword = "jobqueuecheck"
-# GUID für BC15 und BC23 (kann bei dir ggf. abweichen)
+# GUID for BC15 and BC23 (adjust if necessary)
 $TableGuid = "437dbf0e-84ff-417a-965d-ed2bb9650972"
 
 
-# Gewünschte Spalten
+# Desired columns
 $selectColumns = @(    
     "Object ID to Run",
     "Status",
@@ -18,13 +18,13 @@ $selectColumns = @(
     "Earliest Start Date_Time"
 )
 
-# Ergebnisliste initialisieren
+# Initialize result list
 $allRows = New-Object System.Collections.Generic.List[Object]
 
 
-# Deine Serverliste
-# wenn du nur eine Datenbank abfragen willst, dann einfach nur einen Eintrag machen, ansonsten können beliebig viele linked Servers hinterlegt werden
-# Version: 0 = pre BC15 (ohne Table-Guid), 1 = BC15 - BC21, 2 = BC21+ (neues Extension Modell auf dem Server
+# Your server list
+# if you only want to query one database, leave a single entry; multiple linked servers are allowed
+# Version: 0 = pre BC15 (without table GUID), 1 = BC15 - BC21, 2 = BC21+ (new extension model)
 $linkedServers = @(
     @{Server='sql-01';      DB='Live';    Company='Meine GmbH & Co_ KG'; Version=1 ; Country='DE'}
     #@{Server='sql-02';    DB='BC__ES';    Company='MyCompany_ES';        Version=1 ; Country='ES'},
@@ -33,7 +33,7 @@ $linkedServers = @(
 
 $script:failedCompanies = @()
 
-# Funktion für Einzelabfrage
+# Function for a single query
 function Query-JobQueue {
     param ($srv)
 
@@ -93,15 +93,15 @@ WHERE
     }
 }
 
-# Durch alle Server iterieren
+# Iterate over all servers
 foreach ($srv in $linkedServers) {
     Query-JobQueue -srv $srv
 }
 
-# Ergebnis anzeigen
+# Display result
 $allRows | Format-Table -AutoSize
 
-# 🔧 Spalten, die in der Tabelle angezeigt werden sollen
+# 🔧 Columns that should appear in the table
 #$selectColumns = @(
 #    "ID",
 #    "User ID",
@@ -113,7 +113,7 @@ $allRows | Format-Table -AutoSize
 #    "Error Message"
 #)
 
-# 🏁 Funktion: ISO-Code → Flagge
+# 🏁 Function: ISO code → Flag
 function Get-FlagFromCountry {
     param([string]$isoCode)
     if ($isoCode.Length -ne 2) { return "" }
@@ -124,7 +124,7 @@ function Get-FlagFromCountry {
     return $flag
 }
 
-# 🎨 CSS-Stildefinition
+# 🎨 CSS style definition
 $style = @"
 <style>
     body {
@@ -166,17 +166,17 @@ $style = @"
 </style>
 "@
 
-# 🏁 Helper-Funktion: Ländercode → Flagge (als Bild)
+# 🏁 Helper function: country code → flag (as image)
 function Get-FlagImageFromCountry {
     param([string]$isoCode)
     if ([string]::IsNullOrWhiteSpace($isoCode)) { return "" }
     return "<img src='https://flagcdn.com/24x18/$($isoCode.ToLower()).png' alt='$isoCode' style='vertical-align:middle;margin-right:6px;' />"
 }
 
-# 🔁 Spaltenliste ohne "Company" und "Country"
+# Column list without "Company" and "Country"
 $columns = $allRows[0].PSObject.Properties.Name | Where-Object { $_ -notin @("Company", "Country") }
 
-# 📦 Erfolgreiche Datengruppen
+# 📦 Successful data groups
 $groupedHtml = foreach ($group in $allRows | Group-Object Company) {
     $company = $group.Name
     $entries = $group.Group
@@ -207,7 +207,7 @@ $($rows -join "`n")
 "@
 }
 
-# 🚨 Nicht erreichbare Server / Länder
+# 🚨 Unreachable servers/countries
 $failedHtml = foreach ($entry in $failedCompanies) {
     $flag = Get-FlagImageFromCountry -isoCode $entry.Country
     $company = $entry.Company
@@ -218,7 +218,7 @@ $failedHtml = foreach ($entry in $failedCompanies) {
 "@
 }
 
-# 🧾 Gesamtes HTML-Dokument
+# 📾 Complete HTML document
 $html = @"
 <html>
 <head>
@@ -233,31 +233,31 @@ $($failedHtml -join "`n")
 </html>
 "@
 
-# Vorschau lokal öffnen (wenn gewünscht)
-# Auskommentieren wenn HTML-Datei nicht vorab geprüft werden soll
+# Open preview locally (optional)
+# Comment out if the HTML file should not be checked beforehand
 $tempFile = "$env:TEMP\jobqueue_report_land.html"
 $html | Out-File -Encoding utf8 $tempFile
 Start-Process $tempFile
 
 $smtpServer   = "deinSmptServer"
-$smtpPort     = 25                  # oder 25, 465 – je nach Anbieter
+$smtpPort     = 25                  # e.g. 25 or 465 depending on your provider
 $smtpUser     = "deinsuer"
 $smtpPassword = "deinpasswort"
 $from         = "jobqueuecheck@company.com"
-$to           = @("empfaenger1@mail.de", "empfaenger2@mail.de", "empfaenger3@mail.de") #beliebig viele Empfänger kommasepariert eintragen
+$to           = @("empfaenger1@mail.de", "empfaenger2@mail.de", "empfaenger3@mail.de") # any number of recipients separated by commas
 $subject      = "Job Queue Overview $(Get-Date -Format 'dd.MM.yyyy HH:mm')"
 
 
-# HTML-Inhalt vorbereiten (aus vorherigem Schritt)
-# -> Wenn du den $html bereits aus dem vorherigen Schritt hast, ist dieser Teil nicht nötig.
-# -> Hier als Beispiel:
+# Prepare HTML content (from the previous step)
+# -> If you already have $html from the previous step, this section is unnecessary.
+# -> Example:
 # $html = "<html><body><h1>Test</h1><p>Dies ist ein Test</p></body></html>"
 
-# Konvertiere Passwort in SecureString
+# Convert password to SecureString
 $securePassword = ConvertTo-SecureString $smtpPassword -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential($smtpUser, $securePassword)
 
-# E-Mail senden
+# Send email
 Send-MailMessage -From $from `
                  -To $to `
                  -Subject $subject `
@@ -270,4 +270,4 @@ Send-MailMessage -From $from `
 
 
 
-#Stop-Transcript 
+#Stop-Transcript
